@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-docx
+docx2pdf
+language-tool-python
+nltk
+pywin32
