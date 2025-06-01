@@ -31,8 +31,9 @@ def convert_pdf_to_word(pdf_path, docx_path):
     word.Quit()
     print("Conversion done.")
 
-def normalize_text(text):
-    return re.sub(r'\s+', ' ', text).strip()
+# Tokenizer that splits punctuation as separate tokens
+def tokenize_with_punctuation(text):
+    return re.findall(r"\w+|[^\w\s]", text, re.UNICODE)
 
 def convert_word_to_pdf(updated_docx_path, final_pdf_path):
     print("Converting back to PDF...")
@@ -43,22 +44,25 @@ def gpt_proofread(text):
     system_msg = (
         "You are a grammar corrector that also classifies changes and suggests synonyms. "
         "You will receive a sentence to correct. Return a JSON object with the following keys:\n"
+        "- 'original': the original input sentence\n"
         "- 'corrected': the corrected version of the sentence\n"
+        "- 'original_token': list of objects with 'idx' and 'word' from the original sentence\n"
+        "- 'proofread_token': list of objects with 'idx' and 'word' from the corrected sentence\n"
         "- 'changes': a list of changes, where each item includes:\n"
         "  - 'type': one of 'replaced', 'inserted', 'removed', or 'corrected'\n"
-        "  - 'original_idx': index in original text (if applicable)\n"
-        "  - 'proofread_idx': index in corrected text (if applicable)\n"
-        "  - 'original_word': word or punctuation in the original text (if applicable)\n"
-        "  - 'proofread_word': corrected word or punctuation (if applicable)\n"
+        "  - 'original_idx': index in original_token (can be null for insertions)\n"
+        "  - 'proofread_idx': index in proofread_token (can be null for removals)\n"
+        "  - 'original_word': word or punctuation in the original sentence\n"
+        "  - 'proofread_word': corrected word or punctuation\n"
         "  - 'suggestion': up to 3 synonyms (only for 'replaced' or 'inserted')\n"
-        "Important: Treat punctuation changes (e.g., commas, periods, quotation marks) as valid changes and include them in the 'changes' list. "
-        "Do not ignore them. Every inserted or removed punctuation mark must be reflected in the output."
+        "Important: Treat punctuation changes (e.g., commas, periods) as valid changes and reflect them in the tokens and change list."
     )
 
     user_msg = f"Original sentence:\n{text}\n\nPlease return only the JSON."
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
+        # model="gpt-4.1",
         messages=[
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg}
@@ -92,67 +96,48 @@ def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="e
 
     for idx, paragraph in enumerate(doc.paragraphs):
         original_text = paragraph.text
-        norm_text = original_text
-        if not norm_text:
+        if not original_text.strip():
             continue
 
         try:
-            gpt_response = gpt_proofread(norm_text)
+            gpt_response = gpt_proofread(original_text)
         except Exception as e:
             print(f"Error processing paragraph {idx + 1}: {e}")
             continue
-        
-        corrected_text = gpt_response.get("corrected", norm_text)
-        diff_list = gpt_response.get("changes", [])
 
-        if corrected_text != norm_text:
+        corrected_text = gpt_response.get("corrected", original_text)
+        if corrected_text != original_text:
             total_improvements += 1
 
-        original_tokens = norm_text.split()
-        proofread_tokens = corrected_text.split()
-
-        original_text_entries = []
-        revised_text_entries = []
-        print(diff_list)
-        for change in diff_list:
-            orig_idx = change.get("original_idx")
-            proof_idx = change.get("proofread_idx")
-            change_type = change.get("type")
-            orig_word = change.get("original_word")
-            proof_word = change.get("proofread_word")
-            suggestions = change.get("suggestion", [])
-
-            if change_type != "inserted" and orig_idx is not None:
-                original_text_entries.append({
-                    "index": orig_idx,
-                    "word": orig_word,
-                    "type": "error"
-                })
-
-            if proof_idx is not None:
-                revised_text_entries.append({
-                    "index": proof_idx,
-                    "word": proof_word,
-                    "type": change_type,
-                    "suggestions": suggestions if suggestions else [proof_word]
-                })
-
         para_id = idx + 1
-        # Add indexed tokens for original and proofread text
-        original_tokens = [{"idx": i, "word": w} for i, w in enumerate(norm_text.split())]
-        proofread_tokens = [{"idx": i, "word": w} for i, w in enumerate(corrected_text.split())]
-
         data["paragraphs"].append({
             "paragraph_id": para_id,
-            "original": norm_text,
-            "proofread": corrected_text,
-            "original_token": original_tokens,
-            "proofread_token": proofread_tokens,
-            "original_text": original_text_entries,
-            "revised_text": revised_text_entries
+            "original": gpt_response.get("original"),
+            "proofread": gpt_response.get("corrected"),
+            "original_token": gpt_response.get("original_token", []),
+            "proofread_token": gpt_response.get("proofread_token", []),
+            "original_text": [
+                {
+                    "index": ch.get("original_idx"),
+                    "word": ch.get("original_word"),
+                    "type": "error"
+                }
+                for ch in gpt_response.get("changes", [])
+                if ch.get("type") != "inserted" and ch.get("original_idx") is not None
+            ],
+            "revised_text": [
+                {
+                    "index": ch.get("proofread_idx"),
+                    "word": ch.get("proofread_word"),
+                    "type": ch.get("type"),
+                    "suggestions": ch.get("suggestion", [ch.get("proofread_word")])
+                }
+                for ch in gpt_response.get("changes", [])
+                if ch.get("proofread_idx") is not None
+            ]
         })
 
-        # Update paragraph while preserving formatting
+        # Update Word paragraph while preserving formatting
         if paragraph.runs:
             ref_run = paragraph.runs[0]
             paragraph.clear()
