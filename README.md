@@ -66,7 +66,7 @@ The server will run at `http://localhost:5000`.
 #### Example Request
 
 ```sh
-curl -X POST "http://localhost:5000/api/grammar-check?mode=1&file_code=wrong_story&paragraph_id=1&paragraph_id=2"
+curl -X POST "http://localhost:5000/api/grammar-check?mode=1&file_code=wrong_story&paragraph_id=[1,2]"
 ```
 
 #### Example Python Request
