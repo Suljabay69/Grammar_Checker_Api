@@ -198,7 +198,7 @@ def update_changes_on_pdf(final_pdf_path, updated_docx_path, json_output_path, p
     for para in paragraphs_data:
         pid = str(para.get("paragraph_id"))
         if pid in paragraph_id_set:
-            print(pid)
+            print(f"Now Processing Paragraph ID : {pid}")
             proofread_text = para.get("proofread")
             para_index = int(pid) - 1  # Adjust for 0-based indexing
 
@@ -229,10 +229,13 @@ app = FastAPI()
 
 @app.post("/api/grammar-check")
 async def main(
-    mode: str = Query(..., description="Mode of Processing", examples={"mode": ["1"]}),
-    file_code: str = Query(..., description="Filename of the PDF without extension", examples={"file_code": ["wrong_story"]}),
-    paragraph_id: List[str] = Query(..., description="IDs of the changed paragraphs", examples={"paragraph_id": ["1", "2"]})
+    mode: int = Query(...),
+    file_code: str = Query(...),
+    paragraph_id: str = Query(...)
 ):
+    # Clean input like "[1,2,3]" or "1,2,3"
+    cleaned = re.sub(r"[\[\]\s]", "", paragraph_id)
+    paragraph_id_list = cleaned.split(",")
     """
     Main API endpoint for grammar checking and PDF processing.
     - mode="0": Full process (PDF→Word→Proofread→PDF)
