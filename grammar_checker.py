@@ -88,7 +88,7 @@ def gpt_proofread(text):
 def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="example_pdf_001"):
     doc = Document(docx_path)
     data = {"pdf_id": pdf_id, "paragraphs": []}
-    total_errors = 0
+    total_improvements = 0
 
     for idx, paragraph in enumerate(doc.paragraphs):
         original_text = paragraph.text
@@ -106,7 +106,7 @@ def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="e
         synonyms = gpt_response.get("synonyms", {})
 
         if corrected_text != norm_text:
-            total_errors += 1
+            total_improvements += 1
 
         diff = get_diff(norm_text, corrected_text)
         para_id = f"para_{idx+1:03d}"
@@ -139,7 +139,7 @@ def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="e
         json.dump(data, f, indent=2, ensure_ascii=False)
     print(f"Proofread JSON saved to {json_output_path}")
 
-    return total_errors
+    return total_improvements
 
 app = FastAPI()
 
@@ -156,17 +156,17 @@ async def main(
     json_output_path = os.path.abspath(f"jsons/xxx_{filename}.json")
 
     convert_pdf_to_word(pdf_path, docx_path)
-    total_errors = correct_paragraphs(docx_path, updated_docx_path, json_output_path)
+    total_improvements = correct_paragraphs(docx_path, updated_docx_path, json_output_path)
     convert_word_to_pdf(updated_docx_path, final_pdf_path)
 
     elapsed = time.time() - start_time
     print(f"Total processing time: {elapsed:.2f} seconds")
-    print(f"Total Error Found: {total_errors}")
+    print(f"Total Error Found: {total_improvements}")
 
     return {
         "json_filename": os.path.basename(json_output_path),
         "final_pdf_filename": os.path.basename(final_pdf_path),
-        "total_errors": total_errors,
+        "total_improvements": total_improvements,
         "elapsed_time_seconds": round(elapsed, 2)
     }
 
