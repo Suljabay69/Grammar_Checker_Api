@@ -50,20 +50,40 @@ def get_diff(original, corrected):
 
 def gpt_proofread(text):
     prompt = (
-        f"Correct the grammar of the following sentence. After that, provide up to 3 synonyms for each changed word.\n\n"
+        "Correct the grammar of the following sentence. After that, provide up to 3 synonyms for each changed word.\n\n"
         f"Original: {text}\n\nRespond in JSON like this:\n"
-        f'{{"corrected": "...", "synonyms": {{"changed_word": ["syn1", "syn2", "syn3"]}}}}'
+        '{{"corrected": "...", "synonyms": {{"changed_word": ["syn1", "syn2", "syn3"]}}}}'
     )
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a grammar corrector and synonym suggester."},
             {"role": "user", "content": prompt}
         ],
         temperature=0.3,
     )
-    return json.loads(response.choices[0].message.content.strip())
+
+    content = response.choices[0].message.content.strip()
+
+    print("GPT raw response:", content)
+
+    # Try to extract the first JSON object using regex
+    try:
+        match = re.search(r'\{.*\}', content, re.DOTALL)
+        if not match:
+            raise ValueError("No JSON object found in GPT response")
+
+        json_str = match.group(0)
+        result = json.loads(json_str)
+
+        if "corrected" not in result or "synonyms" not in result:
+            raise ValueError("Missing expected keys in GPT response")
+
+        return result
+    except Exception as e:
+        print(f"Failed to parse GPT response for input: {text}\nError: {e}")
+        raise ValueError(f"Invalid GPT JSON response: {content}")
 
 def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="example_pdf_001"):
     doc = Document(docx_path)
