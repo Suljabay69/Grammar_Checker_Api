@@ -21,6 +21,7 @@ api_key = os.getenv("API_KEY")
 # Initialize OpenAI client (not used in main flow, but available)
 client = OpenAI(api_key=api_key)
 
+
 def convert_pdf_to_word(pdf_path, docx_path):
     """
     Convert a PDF file to a Word (.docx) file using Microsoft Word automation.
@@ -34,11 +35,13 @@ def convert_pdf_to_word(pdf_path, docx_path):
     word.Quit()
     print("Conversion done.")
 
+
 def tokenize_with_punctuation(text):
     """
     Tokenizer that splits punctuation as separate tokens.
     """
     return re.findall(r"\w+|[^\w\s]", text, re.UNICODE)
+
 
 def convert_word_to_pdf(updated_docx_path, final_pdf_path):
     """
@@ -47,6 +50,7 @@ def convert_word_to_pdf(updated_docx_path, final_pdf_path):
     print("Converting back to PDF...")
     convert(updated_docx_path, final_pdf_path)
     print(f"Final PDF saved as: {final_pdf_path}")
+
 
 def gpt_proofread(text):
     """
@@ -77,7 +81,7 @@ def gpt_proofread(text):
         # model="gpt-4.1",
         messages=[
             {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg}
+            {"role": "user", "content": user_msg},
         ],
         temperature=0.3,
     )
@@ -85,7 +89,7 @@ def gpt_proofread(text):
     content = response.choices[0].message.content.strip()
 
     try:
-        match = re.search(r'\{.*\}', content, re.DOTALL)
+        match = re.search(r"\{.*\}", content, re.DOTALL)
         if not match:
             raise ValueError("No JSON object found in GPT response")
 
@@ -100,7 +104,10 @@ def gpt_proofread(text):
         print(f"Failed to parse GPT response for input: {text}\nError: {e}")
         raise ValueError(f"Invalid GPT JSON response: {content}")
 
-def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="example_pdf_001"):
+
+def correct_paragraphs(
+    docx_path, updated_docx_path, json_output_path, pdf_id="example_pdf_001"
+):
     """
     Correct grammar in each paragraph of a Word document using GPT,
     update the document, and save a JSON report of all corrections.
@@ -126,32 +133,35 @@ def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="e
             total_improvements += 1
 
         para_id = idx + 1
-        data["paragraphs"].append({
-            "paragraph_id": para_id,
-            "original": gpt_response.get("original"),
-            "proofread": gpt_response.get("corrected"),
-            "original_token": gpt_response.get("original_token", []),
-            "proofread_token": gpt_response.get("proofread_token", []),
-            "original_text": [
-                {
-                    "index": ch.get("original_idx"),
-                    "word": ch.get("original_word"),
-                    "type": "error"
-                }
-                for ch in gpt_response.get("changes", [])
-                if ch.get("type") != "inserted" and ch.get("original_idx") is not None
-            ],
-            "revised_text": [
-                {
-                    "index": ch.get("proofread_idx"),
-                    "word": ch.get("proofread_word"),
-                    "type": ch.get("type"),
-                    "suggestions": ch.get("suggestion", [ch.get("proofread_word")])
-                }
-                for ch in gpt_response.get("changes", [])
-                if ch.get("proofread_idx") is not None
-            ]
-        })
+        data["paragraphs"].append(
+            {
+                "paragraph_id": para_id,
+                "original": gpt_response.get("original"),
+                "proofread": gpt_response.get("corrected"),
+                "original_token": gpt_response.get("original_token", []),
+                "proofread_token": gpt_response.get("proofread_token", []),
+                "original_text": [
+                    {
+                        "index": ch.get("original_idx"),
+                        "word": ch.get("original_word"),
+                        "type": "error",
+                    }
+                    for ch in gpt_response.get("changes", [])
+                    if ch.get("type") != "inserted"
+                    and ch.get("original_idx") is not None
+                ],
+                "revised_text": [
+                    {
+                        "index": ch.get("proofread_idx"),
+                        "word": ch.get("proofread_word"),
+                        "type": ch.get("type"),
+                        "suggestions": ch.get("suggestion", [ch.get("proofread_word")]),
+                    }
+                    for ch in gpt_response.get("changes", [])
+                    if ch.get("proofread_idx") is not None
+                ],
+            }
+        )
 
         # Update Word paragraph while preserving formatting
         if paragraph.runs:
@@ -178,7 +188,10 @@ def correct_paragraphs(docx_path, updated_docx_path, json_output_path, pdf_id="e
 
     return total_improvements
 
-def update_changes_on_pdf(final_pdf_path, updated_docx_path, json_output_path, paragraph_id):
+
+def update_changes_on_pdf(
+    final_pdf_path, updated_docx_path, json_output_path, paragraph_id
+):
     """
     Updates the paragraphs in a Word document based on proofread data from a JSON file.
     Only updates paragraphs whose IDs are in paragraph_id.
@@ -187,10 +200,10 @@ def update_changes_on_pdf(final_pdf_path, updated_docx_path, json_output_path, p
     # Load proofreading results from JSON
     with open(json_output_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
+
     paragraphs_data = data.get("paragraphs", [])
     paragraph_id_set = set(paragraph_id)
-    
+
     # Load the existing DOCX file
     doc = Document(updated_docx_path)
     updated_count = 0
@@ -224,15 +237,20 @@ def update_changes_on_pdf(final_pdf_path, updated_docx_path, json_output_path, p
 
     return updated_count
 
+
 # Initialize FastAPI app
 app = FastAPI()
 
+
 @app.post("/api/grammar-check")
 async def main(
-    mode: int = Query(...),
-    file_code: str = Query(...),
-    paragraph_id: str = Query(...)
+    mode: int = Query(...), file_code: str = Query(...), paragraph_id: str = Query(...)
 ):
+    # Print the incoming request parameters
+    print(
+        f"Received request: mode={mode}, file_code={file_code}, paragraph_id={paragraph_id}"
+    )
+
     # Clean input like "[1,2,3]" or "1,2,3"
     cleaned = re.sub(r"[\[\]\s]", "", paragraph_id)
     paragraph_id_list = cleaned.split(",")
@@ -252,15 +270,19 @@ async def main(
     json_output_path = os.path.abspath(f"jsons/xxx_{file_code}.json")
 
     # Main processing logic based on mode
-    if mode == "0":
+    if mode == 0:
         # Full process: convert, proofread, and save all
         convert_pdf_to_word(pdf_path, docx_path)
-        total_improvements = correct_paragraphs(docx_path, updated_docx_path, json_output_path)
+        total_improvements = correct_paragraphs(
+            docx_path, updated_docx_path, json_output_path
+        )
         convert_word_to_pdf(updated_docx_path, final_pdf_path)
     else:
         # Only update selected paragraphs
         convert_pdf_to_word(final_pdf_path, docx_path)
-        total_improvements = update_changes_on_pdf(final_pdf_path, updated_docx_path, json_output_path, paragraph_id)
+        total_improvements = update_changes_on_pdf(
+            final_pdf_path, updated_docx_path, json_output_path, paragraph_id
+        )
         convert_word_to_pdf(updated_docx_path, final_pdf_path)
 
     elapsed = time.time() - start_time
@@ -272,8 +294,9 @@ async def main(
         "json_filename": os.path.basename(json_output_path),
         "final_pdf_filename": os.path.basename(final_pdf_path),
         "total_improvements": total_improvements,
-        "elapsed_time_seconds": round(elapsed, 2)
+        "elapsed_time_seconds": round(elapsed, 2),
     }
+
 
 if __name__ == "__main__":
     # Run the FastAPI app with Uvicorn
