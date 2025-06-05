@@ -29,6 +29,7 @@ This project provides an **API for automatic grammar correction** of PDF documen
   - `pywin32`
   - `openai`
   - `python-dotenv`
+  - `asyncio`
 
 **Install all dependencies using:**
 ```sh
